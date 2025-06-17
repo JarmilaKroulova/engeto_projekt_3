@@ -7,6 +7,7 @@ Tento skript slouží ke scrapování výsledků voleb do Poslanecké sněmovny 
 ## Přílohy:
     - requierements.txt - textový soubor se seznamem potřebných knihoven
     - README.md - tento soubor s popisem projektu, návodem na instalaci a ukázkou spuštění
+    - vysledky_usti.csv - ukázkový výstupní csv soubor
 
 ## Požadavky pro spuštění
     - Python 3.10+
