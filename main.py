@@ -176,10 +176,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# cd main_projekt
-# .\main_virtualni_prostredi\Scripts\activate
-# .\main_virtualni_prostredi\Scripts\deactivate
-# python main.py "https://www.volby.cz/pls/ps2017nss/ps32?xjazyk=CZ&xkraj=2&xnumnuts=2101" vysledky_benesov.csv
-
