@@ -1,19 +1,22 @@
-print("""
+"""
 main.py: třetí projekt do Engeto Online Python Akademie
 
 author: Jarmila Kroulová
 email: jarmilxxx@seznam.cz
 """
-)
+
 
 import sys
 import csv
 import time
+import re
+
 
 import requests
 from bs4 import BeautifulSoup
 
-def kontrola_vstupu():
+
+def zkontrolovani_vstupu():
     """
     Zkontroluje, zda byly zadány správné argumenty (URL a název CSV souboru) 
     a zda má URL požadovaný tvar.
@@ -28,13 +31,13 @@ def kontrola_vstupu():
         sys.exit(1)
 
     url = sys.argv[1]
-    output_file = sys.argv[2]
+    vystupni_soubor = sys.argv[2]
 
     if not url.startswith("https://www.volby.cz/pls/ps2017nss/ps32"):
         print("Chybný odkaz. Zadej URL na konkrétní územní celek (začíná na 'ps32').")
         sys.exit(1)
 
-    return url, output_file
+    return url, vystupni_soubor
 
 
 def zpracovani_uzemniho_celku(url):
@@ -47,10 +50,10 @@ def zpracovani_uzemniho_celku(url):
     Vrací:
     BeautifulSoup: Zpracovaný HTML obsah stránky.
     """
-    headers = {"User-Agent": "Mozilla/5.0"}
-    odpoved = requests.get(url, headers=headers)
-    if odpoved.status_code != 200:
-        print("Nepodařilo se stáhnout stránku, zkontroluj URL.")
+    hlavicka = {"User-Agent": "Mozilla/5.0"}
+    odpoved = requests.get(url, headers=hlavicka)
+    if not odpoved.ok:
+        print(f"Nepodařilo se stáhnout stránku, zkontroluj URL. Chyba {odpoved.status_code}")
         sys.exit(1)
     return BeautifulSoup(odpoved.text, "html.parser")
 
@@ -65,20 +68,37 @@ def ziskani_odkazu_obci(soup) -> list[tuple[str, str, str]]:
     Vrací:
         list[tuple]: Seznam trojic (kód obce, název obce, URL obce).
     """
-    links = soup.find_all("td", class_="cislo")
-    base_url = "https://www.volby.cz/pls/ps2017nss/"
+    odkazy = soup.find_all("td", class_="cislo")
+    hlavni_url = "https://www.volby.cz/pls/ps2017nss/"
     vysledky_obci = []
 
-    for link in links:
-        a = link.find("a")
+    for odkaz in odkazy:
+        a = odkaz.find("a")
         if a and a.get("href"):
-            obec_url = base_url + a.get("href")
+            obec_url = hlavni_url + a.get("href")
             kod = a.text.strip()
-            jmeno_td = link.find_next_sibling("td")
+            jmeno_td = odkaz.find_next_sibling("td")
             jmeno = jmeno_td.text.strip() if jmeno_td else ""
             vysledky_obci.append((kod, jmeno, obec_url))
 
     return vysledky_obci
+
+def najdi_udaj(soup, vzor_popisku):
+    """
+    Najde údaj na základě popisku v buňce tabulky.
+    
+    Parametry:
+        soup (BeautifulSoup): HTML obsah stránky.
+        vzor_popisku (str): Regulární výraz hledaného popisku (např. "Odevzdané\\s*obálky").
+
+    Vrací:
+        str: Hodnota z vedlejší buňky, nebo prázdný řetězec, pokud nebyla nalezena.
+    """
+    td = soup.find("td", string=re.compile(vzor_popisku))
+    if td:
+        sourozenec = td.find_next_sibling("td")
+        return sourozenec.text.strip() if sourozenec else ""
+    return ""
 
 
 def ziskani_dat_z_obce(url) -> dict[str, str]:
@@ -91,16 +111,13 @@ def ziskani_dat_z_obce(url) -> dict[str, str]:
     Vrací:
     dict[str, str]: Slovník s údaji o voličích a počtech hlasů pro strany 
     """
-    headers = {"User-Agent": "Mozilla/5.0"}
-    odpoved = requests.get(url, headers=headers)
+    hlavicka = {"User-Agent": "Mozilla/5.0"}
+    odpoved = requests.get(url, headers=hlavicka)
     soup = BeautifulSoup(odpoved.text, "html.parser")
 
-    cisla_tagy = soup.find_all("td", class_="cislo")
-    volici = obalky = platne = ""
-    if len(cisla_tagy) >= 8:
-        volici = cisla_tagy[3].text.strip()
-        obalky = cisla_tagy[4].text.strip()
-        platne = cisla_tagy[7].text.strip()
+    volici = najdi_udaj(soup, r"Voli[čc]i")
+    obalky = najdi_udaj(soup, r"Odevzdané\s*obálky")
+    platne = najdi_udaj(soup, r"Platné\s*hlasy")
 
     strany = {}
     for tabulka_tag in soup.find_all("div", {"class": "t2_470"}):
@@ -119,12 +136,12 @@ def ziskani_dat_z_obce(url) -> dict[str, str]:
     }
 
 
-def zapsani_do_csv(output_file, vysledky):
+def zapsani_do_csv(vystupni_soubor, vysledky):
     """
     Zapíše získaná data do CSV souboru.
 
     Parametry:
-    output_file (str): Název výstupního CSV souboru.
+    vystupni_soubor (str): Název výstupního CSV souboru.
     vysledky (list[dict]): Seznam řádků (slovníků) s volebními výsledky.Zapíše výsledná data do souboru.
     """
     if not vysledky:
@@ -132,11 +149,10 @@ def zapsani_do_csv(output_file, vysledky):
         return
 
     hlavicka = vysledky[0].keys()
-    with open(output_file, mode="w", encoding="utf-8", newline="") as file:
+    with open(vystupni_soubor, mode="w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=hlavicka)
         writer.writeheader()
-        for radek in vysledky:
-            writer.writerow(radek)
+        writer.writerows(vysledky)
 
 
 def main():
@@ -147,7 +163,7 @@ def main():
     - zpracuje výsledky všech obcí
     - uloží je do CSV souboru
     """
-    url, output_file = kontrola_vstupu()
+    url, vystupni_soubor = zkontrolovani_vstupu()
 
     hlavni_soup = zpracovani_uzemniho_celku(url)
     obce = ziskani_odkazu_obci(hlavni_soup)
@@ -170,9 +186,17 @@ def main():
 
         time.sleep(1) 
 
-    zapsani_do_csv(output_file, vysledky)
-    print(f"\nHotovo! Výstupní soubor: {output_file}")
+    zapsani_do_csv(vystupni_soubor, vysledky)
+    print(f"\nHotovo! Výstupní soubor: {vystupni_soubor}")
 
 
 if __name__ == "__main__":
     main()
+
+
+
+# cd main_projekt
+# .\main_virtualni_prostredi\Scripts\activate
+# .\main_virtualni_prostredi\Scripts\deactivate
+# python main.py "https://www.volby.cz/pls/ps2017nss/ps32?xjazyk=CZ&xkraj=2&xnumnuts=2101" vysledky_benesov.csv
+
